@@ -3,7 +3,7 @@ from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 
 # ---------------- CONFIGURATION ----------------
-TOKEN = "YOUR_TELEGRAM_BOT_API_TOKEN"  # Telegram bot token yahan daalo
+TOKEN = "8386912250:AAHWppIHrXHpG8lQuZ7l3xkO4AjMUkIkhZg"  # Telegram bot token yahan daalo
 NGROK_URL = "https://7384db352347.ngrok-free.app"  # Colab ka ngrok URL
 
 # ---------------- FUNCTIONS ----------------
