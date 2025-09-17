@@ -1,0 +1,43 @@
+import requests
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, filters, CallbackContext
+
+# ----------- CONFIGURATION -----------
+TOKEN = "8386912250:AAHWppIHrXHpG8lQuZ7l3xkO4AjMUkIkhZg"
+NGROK_URL = "https://7384db352347.ngrok-free.app"  # Replace with your actual ngrok URL
+
+# ----------- FUNCTIONS -----------
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("Hello! Send me a prompt with /video command, I will generate video.")
+
+def generate_video(update: Update, context: CallbackContext):
+    if len(context.args) == 0:
+        update.message.reply_text("Please provide a prompt, e.g., /video A flying anime cat")
+        return
+
+    prompt = " ".join(context.args)
+    update.message.reply_text(f"Generating video for: {prompt} ⏳")
+
+    try:
+        response = requests.post(f"{NGROK_URL}/generate", json={"prompt": prompt}, stream=True)
+        if response.status_code == 200:
+            video_path = "/tmp/video.mp4"
+            with open(video_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=1024*1024):
+                    if chunk:
+                        f.write(chunk)
+            update.message.reply_video(video=open(video_path, "rb"))
+        else:
+            update.message.reply_text(f"Error from server: {response.status_code}")
+    except Exception as e:
+        update.message.reply_text(f"Failed to generate video: {e}")
+
+# ----------- BOT SETUP -----------
+updater = Updater(TOKEN)
+dp = updater.dispatcher
+dp.add_handler(CommandHandler("start", start))
+dp.add_handler(CommandHandler("video", generate_video, pass_args=True))
+
+print("🤖 Bot is running...")
+updater.start_polling()
+updater.idle()
