@@ -1,51 +1,141 @@
-import requests
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
+import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from gtts import gTTS
+import os
 
-# ---------------- CONFIGURATION ----------------
-TOKEN = "8386912250:AAHWppIHrXHpG8lQuZ7l3xkO4AjMUkIkhZg"  # Telegram bot token yahan daalo
-NGROK_URL = "https://7384db352347.ngrok-free.app"  # Colab ka ngrok URL
+BOT_TOKEN = "8386912250:AAHWppIHrXHpG8lQuZ7l3xkO4AjMUkIkhZg"
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# ---------------- FUNCTIONS ----------------
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text(
-        "Hello! Send me a prompt using /video command.\nExample: /video A flying anime cat"
-    )
+Store user data temporarily
 
-def generate_video(update: Update, context: CallbackContext):
-    if len(context.args) == 0:
-        update.message.reply_text("Please provide a prompt, e.g., /video A flying anime cat")
-        return
+user_data = {}
 
-    prompt = " ".join(context.args)
-    update.message.reply_text(f"Generating video for: {prompt} ⏳")
+Step 0: Receive text
 
-    try:
-        # Send POST request to Colab Flask server
-        response = requests.post(f"{NGROK_URL}/generate", json={"prompt": prompt}, stream=True)
+@bot.message_handler(func=lambda msg: True)
+def receive_text(message):
+user_data[message.chat.id] = {"text": message.text}
+language_buttons(message.chat.id)
 
-        if response.status_code == 200:
-            # Save video temporarily
-            video_path = "/tmp/video.mp4"
-            with open(video_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=1024*1024):
-                    if chunk:
-                        f.write(chunk)
-            # Send video to Telegram
-            update.message.reply_video(video=open(video_path, "rb"))
-        else:
-            update.message.reply_text(f"Server error: {response.status_code}")
+Step 1: Language selection
 
-    except Exception as e:
-        update.message.reply_text(f"Failed to generate video: {e}")
+def language_buttons(chat_id):
+markup = InlineKeyboardMarkup()
+markup.row_width = 2
+markup.add(
+InlineKeyboardButton("Hindi 🇮🇳", callback_data="lang_hi"),
+InlineKeyboardButton("English 🇬🇧", callback_data="lang_en")
+)
+bot.send_message(chat_id, "Step 1️⃣: Select Language", reply_markup=markup)
 
-# ---------------- BOT SETUP ----------------
-updater = Updater(TOKEN)
-dp = updater.dispatcher
+Step 2: Voice selection
 
-dp.add_handler(CommandHandler("start", start))
-dp.add_handler(CommandHandler("video", generate_video, pass_args=True))
+def voice_buttons(chat_id):
+markup = InlineKeyboardMarkup()
+markup.row_width = 2
+markup.add(
+InlineKeyboardButton("Male 👨", callback_data="voice_male"),
+InlineKeyboardButton("Female 👩", callback_data="voice_female"),
+InlineKeyboardButton("Robot 🤖", callback_data="voice_robot"),
+InlineKeyboardButton("Soft 🧸", callback_data="voice_soft")
+)
+bot.send_message(chat_id, "Step 2️⃣: Select Voice", reply_markup=markup)
 
-print("🤖 Bot is running...")
-updater.start_polling()
-updater.idle()
+Step 3: Emotion selection
+
+def emotion_buttons(chat_id):
+markup = InlineKeyboardMarkup()
+markup.row_width = 2
+markup.add(
+InlineKeyboardButton("Happy 😄", callback_data="emo_happy"),
+InlineKeyboardButton("Sad 😢", callback_data="emo_sad"),
+InlineKeyboardButton("Angry 😡", callback_data="emo_angry"),
+InlineKeyboardButton("Neutral 😐", callback_data="emo_neutral")
+)
+bot.send_message(chat_id, "Step 3️⃣: Select Emotion", reply_markup=markup)
+
+Step 4: Optional speed/pitch buttons
+
+def speed_buttons(chat_id):
+markup = InlineKeyboardMarkup()
+markup.row_width = 3
+markup.add(
+InlineKeyboardButton("Slow 🐢", callback_data="speed_slow"),
+InlineKeyboardButton("Normal 🐎", callback_data="speed_normal"),
+InlineKeyboardButton("Fast ⚡", callback_data="speed_fast")
+)
+bot.send_message(chat_id, "Step 4️⃣: Select Speed", reply_markup=markup)
+
+Handle button presses
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
+chat_id = call.message.chat.id
+data = call.data
+
+if chat_id not in user_data:  
+    bot.send_message(chat_id, "Please send text first.")  
+    return  
+
+# Language  
+if data.startswith("lang_"):  
+    user_data[chat_id]["lang"] = data.split("_")[1]  
+    bot.edit_message_text("✅ Language selected", chat_id, call.message.message_id)  
+    voice_buttons(chat_id)  
+
+# Voice  
+elif data.startswith("voice_"):  
+    user_data[chat_id]["voice"] = data.split("_")[1]  
+    bot.edit_message_text("✅ Voice selected", chat_id, call.message.message_id)  
+    emotion_buttons(chat_id)  
+
+# Emotion  
+elif data.startswith("emo_"):  
+    user_data[chat_id]["emotion"] = data.split("_")[1]  
+    bot.edit_message_text("✅ Emotion selected", chat_id, call.message.message_id)  
+    speed_buttons(chat_id)  
+
+# Speed  
+elif data.startswith("speed_"):  
+    speed_map = {"slow": 0.8, "normal": 1.0, "fast": 1.2}  
+    user_data[chat_id]["speed"] = speed_map[data.split("_")[1]]  
+    bot.edit_message_text("✅ Speed selected", chat_id, call.message.message_id)  
+    generate_voice(chat_id)
+
+Generate final voice
+
+def generate_voice(chat_id):
+info = user_data.get(chat_id)
+if not info:
+bot.send_message(chat_id, "Error: No data found.")
+return
+
+text = info["text"]  
+lang = info.get("lang", "en")  
+voice = info.get("voice", "male")  
+emotion = info.get("emotion", "neutral")  
+speed = info.get("speed", 1.0)  
+
+# Simple emotion to pitch mapping  
+pitch_map = {"happy": 70, "sad": 50, "angry": 55, "neutral": 60}  
+pitch = pitch_map.get(emotion, 60)  
+
+# Generate gTTS  
+tts = gTTS(text=text, lang=lang)  
+tts.save("output.mp3")  
+
+# Adjust speed using ffmpeg  
+os.system(f"ffmpeg -y -i output.mp3 -filter:a 'atempo={speed}' output_final.mp3 > /dev/null 2>&1")  
+
+# Send voice  
+with open("output_final.mp3", "rb") as audio:  
+    bot.send_voice(chat_id, audio)  
+
+# Cleanup  
+os.remove("output.mp3")  
+os.remove("output_final.mp3")  
+user_data.pop(chat_id, None)
+
+print("🤖 Fully Interactive Telegram TTS Bot running with buttons...")
+bot.polling()
+
